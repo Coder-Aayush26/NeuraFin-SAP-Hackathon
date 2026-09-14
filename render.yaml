@@ -2,10 +2,12 @@ services:
   - type: web
     name: neurafin-demo
     env: node
-    buildCommand: npm install --include=dev && npm run build
+    buildCommand: npm install --include=dev && npm_config_build_from_source=true npm rebuild sqlite3 && npm run build
     startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
+      - key: NODE_VERSION
+        value: 22.14.0
       - key: GEMINI_API_KEY
         sync: false
