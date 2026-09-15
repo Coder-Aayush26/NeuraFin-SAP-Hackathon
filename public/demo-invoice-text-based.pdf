@@ -1,0 +1,90 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 1233 >>
+stream
+BT
+/F1 11 Tf
+50 760 Td
+(TAX INVOICE) Tj
+0 -18 Td
+(Supplier: Acme Steel Co.) Tj
+0 -18 Td
+(Supplier Address: 14 Industrial Estate, Pune, Maharashtra 411019) Tj
+0 -18 Td
+(Supplier Tax ID: GSTIN 27AACCA1234A1Z5) Tj
+0 -18 Td
+() Tj
+0 -18 Td
+(Invoice Number: INV-4471) Tj
+0 -18 Td
+(Invoice Date: 2026-09-15) Tj
+0 -18 Td
+(Due Date: 2026-10-15) Tj
+0 -18 Td
+(Currency: INR) Tj
+0 -18 Td
+(Purchase Order: PO-8821) Tj
+0 -18 Td
+(Goods Receipt: GRN-8821) Tj
+0 -18 Td
+() Tj
+0 -18 Td
+(Bill To: NeuraFin Manufacturing Pvt. Ltd.) Tj
+0 -18 Td
+(Bill To Address: 88 Finance Park, Bengaluru, Karnataka 560001) Tj
+0 -18 Td
+() Tj
+0 -18 Td
+(LINE ITEMS) Tj
+0 -18 Td
+(Description                    Quantity   Unit Price       Line Total) Tj
+0 -18 Td
+(Cold Rolled Steel Sheet        100        INR 4,820.00     INR 482,000.00) Tj
+0 -18 Td
+() Tj
+0 -18 Td
+(Subtotal: INR 482,000.00) Tj
+0 -18 Td
+(GST \(18%\): INR 86,760.00) Tj
+0 -18 Td
+(Total: INR 568,760.00) Tj
+0 -18 Td
+() Tj
+0 -18 Td
+(Payment Terms: Net 30 days) Tj
+0 -18 Td
+(Bank Reference: ACME-INV-4471) Tj
+0 -18 Td
+(Three-way match note: Quantity is 100 units. Contract price variance is 4%.) Tj
+0 -18 Td
+() Tj
+0 -18 Td
+(This is a text-based demonstration invoice for NeuraFin AP automation testing.) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000001526 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+1596
+%%EOF
