@@ -60,6 +60,23 @@ export default function AP() {
     }
   };
 
+  const handleRecall = async (id) => {
+    setProcessingId(id);
+    try {
+      const baseUrl = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:3001' : window.location.origin);
+      const res = await fetch(`${baseUrl}/api/invoices/${id}/recall`, { method: 'POST' });
+      if (!res.ok) throw new Error('Failed to recall Tier 1 transaction');
+      const updated = await res.json();
+      setInvoices(prev => prev.map(inv => inv.id === id ? updated : inv));
+      setNotification(`Tier 1 transaction ${id} recalled to Human Review.`);
+      setTimeout(() => setNotification(null), 5000);
+    } catch (error) {
+      console.error('Failed to recall invoice:', error);
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
   const extractPdfValue = (pdfText, label) => {
     const match = pdfText.match(new RegExp(`\\(${label}:\\s*([^)]*)\\)\\s*Tj`));
     return match?.[1]?.replaceAll('\\\\(', '(').replaceAll('\\\\)', ')').trim() || '';
@@ -255,9 +272,30 @@ export default function AP() {
                 {/* Right col: Action Buttons */}
                 <div className="lg:w-1/4 flex flex-col justify-center space-y-2">
                   {inv.status === 'approved' ? (
-                     <div className="text-center text-xs text-emerald-400 font-semibold p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center justify-center">
-                       <CheckCircle size={14} className="mr-1.5" /> Approved & Posted
-                     </div>
+                    inv.tier === 1 ? (
+                      <>
+                        <div className="text-center text-xs text-emerald-400 font-semibold p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center justify-center">
+                          <CheckCircle size={14} className="mr-1.5" /> Approved & Posted
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRecall(inv.id)}
+                          disabled={processingId === inv.id}
+                          className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 px-4 py-2 rounded-xl text-xs font-medium flex items-center justify-center transition-all disabled:opacity-50"
+                        >
+                          {processingId === inv.id ? <Loader2 size={13} className="animate-spin mr-1.5" /> : <ShieldCheck size={13} className="mr-1.5" />}
+                          Recall to Human Review
+                        </button>
+                      </>
+                    ) : (
+                      <div className="text-center text-xs text-emerald-400 font-semibold p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center justify-center">
+                        <CheckCircle size={14} className="mr-1.5" /> Approved & Posted
+                      </div>
+                    )
+                  ) : inv.status === 'recalled' ? (
+                    <div className="text-center text-xs text-amber-300 font-semibold p-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center justify-center">
+                      <ShieldCheck size={14} className="mr-1.5" /> Recalled to Human Review
+                    </div>
                   ) : inv.tier === 2 ? (
                     <>
                       <button 

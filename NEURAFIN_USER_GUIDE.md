@@ -65,6 +65,16 @@ For example, an invoice that is 4% above a contract price may be shown as a Tier
 4. Select **Approve & Post** if the invoice is correct.
 5. NeuraFin updates the invoice and records the action in the audit trail.
 
+### Recalling a Tier 1 transaction
+
+Tier 1 invoices are auto-posted, but the **Standing Override Active** control keeps them recallable. On a Tier 1 invoice in Intelligent AP:
+
+1. Select **Recall to Human Review**.
+2. NeuraFin changes the transaction to **Recalled to Human Review**.
+3. An immutable governance audit entry records the recall and confidence score.
+
+Only approved Tier 1 transactions can be recalled, and a recalled transaction cannot be recalled a second time.
+
 ### Uploading invoice files
 
 The **Upload Batch PDF** button accepts one or more `.pdf` files. Readable text-based PDFs are inspected for invoice fields and added to the processing queue with a match tier. Image-only scans, password-protected files, or PDFs without the expected fields remain in the queue as exceptions for manual extraction.

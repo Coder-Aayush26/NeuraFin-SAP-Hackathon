@@ -104,6 +104,28 @@ app.post('/api/invoices/:id/approve', async (req, res) => {
   }
 });
 
+app.post('/api/invoices/:id/recall', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const invoice = await db.get('SELECT * FROM Invoices WHERE id = ?', [id]);
+    if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
+    if (invoice.tier !== 1 || invoice.status !== 'approved') {
+      return res.status(409).json({ error: 'Only approved Tier 1 invoices can be recalled' });
+    }
+
+    const reasoning = 'Tier 1 auto-post recalled under Standing Override and routed to Human Review.';
+    await db.run('UPDATE Invoices SET status = ?, reasoning = ? WHERE id = ?', ['recalled', reasoning, id]);
+    await db.run(
+      'INSERT INTO AuditLogs (action, time, score, module) VALUES (?, ?, ?, ?)',
+      [`Recalled Tier 1 transaction: ${id}`, new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), invoice.score, 'AI Governance']
+    );
+
+    res.json({ ...invoice, status: 'recalled', reasoning });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.post('/api/invoices/:id/review', async (req, res) => {
   try {
     const { id } = req.params;
