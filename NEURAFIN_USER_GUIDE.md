@@ -67,18 +67,20 @@ For example, an invoice that is 4% above a contract price may be shown as a Tier
 
 ### Uploading invoice files
 
-The **Upload Batch PDF** button accepts one or more `.pdf` files. In the current MVP, the files are added to the processing queue for demonstration, but invoice fields are not extracted from the PDF yet.
+The **Upload Batch PDF** button accepts one or more `.pdf` files. Readable text-based PDFs are inspected for invoice fields and added to the processing queue with a match tier. Image-only scans, password-protected files, or PDFs without the expected fields remain in the queue as exceptions for manual extraction.
 
 For future matching insight, each invoice should contain readable text with these fields:
 
-- invoice number;
-- supplier or vendor name;
-- invoice date and currency;
-- purchase order number;
-- line-item description, quantity, unit price, and tax; and
-- subtotal, total amount, and payment terms.
 
-Use a text-based PDF rather than a password-protected or image-only scan. A batch may contain one invoice per PDF, or one PDF with one invoice per page once document extraction is enabled. The purchase order and goods receipt must also be available in the system for a complete three-way match.
+Use a text-based PDF rather than a password-protected or image-only scan. Upload one invoice per PDF for the most reliable result. The purchase order and goods receipt references must also be available in the document or system for a complete three-way match.
+
+The development database includes sample records for testing:
+
+- **PO-8821** for Acme Steel Co.: 100 units at INR 4,634.62 each;
+- **GRN-8821** for PO-8821: 100 units received; and
+- **INV-4471** from the sample PDF: 100 units at INR 4,820.00 each.
+
+Uploading the sample invoice compares these separate records. Because the invoice price is 4% above the PO price while quantity and receipt quantity agree, the result is Tier 2 with an 84% match score.
 
 ---
 

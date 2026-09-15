@@ -4,6 +4,7 @@ import { AlertOctagon, ShieldCheck, TrendingUp, Loader2, ArrowUpRight, ExternalL
 export default function Risk() {
   const [vendors, setVendors] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedVendor, setSelectedVendor] = useState(null);
 
   useEffect(() => {
     fetchVendors();
@@ -106,7 +107,7 @@ export default function Risk() {
                  <span className="text-slate-400">
                    Routing: <strong className="text-slate-200">{vendor.status}</strong>
                  </span>
-                 <button className="text-blue-400 hover:text-blue-300 font-semibold inline-flex items-center transition-colors">
+                 <button type="button" onClick={() => setSelectedVendor(vendor)} className="text-blue-400 hover:text-blue-300 font-semibold inline-flex items-center transition-colors">
                    Inspect Profile <ArrowUpRight size={13} className="ml-1" />
                  </button>
               </div>
@@ -122,13 +123,32 @@ export default function Risk() {
             <TrendingUp size={22} />
           </div>
           <div>
+
+          {selectedVendor && (
+            <div className="rounded-2xl bg-slate-900/80 border border-blue-500/30 p-6 shadow-xl">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-wider text-blue-400 font-bold">Supplier profile</p>
+                  <h3 className="text-lg font-bold text-white mt-1">{selectedVendor.name}</h3>
+                  <p className="text-xs text-slate-400 mt-1">{selectedVendor.category} · Current routing: {selectedVendor.status}</p>
+                </div>
+                <button type="button" onClick={() => setSelectedVendor(null)} className="text-xs text-slate-400 hover:text-white">Close</button>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-5 text-xs">
+                <div><p className="text-slate-500">Delivery</p><p className="text-white font-bold mt-1">{selectedVendor.delivery}%</p></div>
+                <div><p className="text-slate-500">Quality</p><p className="text-white font-bold mt-1">{selectedVendor.quality}%</p></div>
+                <div><p className="text-slate-500">Risk</p><p className="text-white font-bold mt-1">{selectedVendor.risk}</p></div>
+                <div><p className="text-slate-500">Recommended action</p><p className="text-white font-bold mt-1">{selectedVendor.risk === 'High' ? 'Senior review' : 'Continue monitoring'}</p></div>
+              </div>
+            </div>
+          )}
             <h4 className="text-sm font-bold text-white">AI-Guided Sourcing Guardrails Active</h4>
             <p className="text-xs text-slate-400 mt-0.5">
               Requisitions automatically route to pre-approved contract vendors. Maverick spend attempts trigger proactive alerts to budget holders.
             </p>
           </div>
         </div>
-        <button className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold px-4 py-2 rounded-xl border border-slate-700 transition-all shrink-0">
+        <button type="button" onClick={() => setSelectedVendor(vendors.reduce((highest, vendor) => vendor.risk === 'High' ? vendor : highest, vendors[0]))} className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold px-4 py-2 rounded-xl border border-slate-700 transition-all shrink-0">
           View Concentration Index
         </button>
       </div>

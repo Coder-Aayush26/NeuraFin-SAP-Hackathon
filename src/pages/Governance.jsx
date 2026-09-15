@@ -22,6 +22,17 @@ export default function Governance() {
     }
   };
 
+  const exportAuditReport = () => {
+    const rows = [['Action', 'Time', 'Confidence', 'Module'], ...auditLogs.map(log => [log.action, log.time, `${log.score}%`, log.module])];
+    const csv = rows.map(row => row.map(value => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'neurafin-compliance-audit.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       
@@ -32,10 +43,10 @@ export default function Governance() {
           <p className="text-slate-400 text-xs mt-0.5">Full explainability, confidence thresholds, and immutable decision logging</p>
         </div>
         <button 
-          onClick={() => alert("Audit report PDF successfully generated and queued for export.")}
+          onClick={exportAuditReport}
           className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold px-4 py-2.5 rounded-xl border border-slate-700 shadow-md flex items-center transition-all"
         >
-          <Download size={14} className="mr-2 text-blue-400" /> Export Compliance Audit (PDF)
+          <Download size={14} className="mr-2 text-blue-400" /> Export Compliance Audit
         </button>
       </div>
 

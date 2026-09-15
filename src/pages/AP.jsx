@@ -43,7 +43,87 @@ export default function AP() {
     }
   };
 
-  const handleBatchUpload = (event) => {
+  const handleSeniorReview = async (id) => {
+    setProcessingId(id);
+    try {
+      const baseUrl = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:3001' : window.location.origin);
+      const res = await fetch(`${baseUrl}/api/invoices/${id}/review`, { method: 'POST' });
+      if (!res.ok) throw new Error('Failed to route invoice to senior review');
+      const updated = await res.json();
+      setInvoices(prev => prev.map(inv => inv.id === id ? updated : inv));
+      setNotification(`Invoice ${id} routed to Senior Review.`);
+      setTimeout(() => setNotification(null), 4000);
+    } catch (error) {
+      console.error('Failed to route invoice:', error);
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const extractPdfValue = (pdfText, label) => {
+    const match = pdfText.match(new RegExp(`\\(${label}:\\s*([^)]*)\\)\\s*Tj`));
+    return match?.[1]?.replaceAll('\\\\(', '(').replaceAll('\\\\)', ')').trim() || '';
+  };
+
+  const parseInvoicePdf = async (file, index) => {
+    const pdfBytes = await file.arrayBuffer();
+    const pdfText = new TextDecoder('latin1').decode(pdfBytes);
+    const pdfLines = [...pdfText.matchAll(/\(([^)]*)\)\s*Tj/g)].map(match => match[1]);
+    const invoiceNumber = extractPdfValue(pdfText, 'Invoice Number');
+    const vendor = extractPdfValue(pdfText, 'Supplier');
+    const total = extractPdfValue(pdfText, 'Total');
+    const purchaseOrder = extractPdfValue(pdfText, 'Purchase Order');
+    const goodsReceipt = extractPdfValue(pdfText, 'Goods Receipt');
+    const lineItem = pdfLines.find(line => /\s\d+(?:\.\d+)?\s+INR\s+[\d,]+\.\d{2}\s+INR\s+[\d,]+\.\d{2}/.test(line));
+    const lineItemValues = lineItem?.match(/\s(\d+(?:\.\d+)?)\s+INR\s+([\d,]+\.\d{2})\s+INR\s+[\d,]+\.\d{2}/);
+    const quantity = lineItemValues ? Number(lineItemValues[1]) : NaN;
+    const unitPrice = lineItemValues ? Number(lineItemValues[2].replaceAll(',', '')) : NaN;
+
+    if (!invoiceNumber || !vendor || !total || !Number.isFinite(quantity) || !Number.isFinite(unitPrice)) {
+      return {
+        id: `UPLOAD-${Date.now()}-${index + 1}`,
+        vendor: file.name,
+        amount: 'Awaiting extraction',
+        tier: 3,
+        score: 0,
+        reasoning: 'PDF received, but readable invoice fields or line-item pricing were not found. Use a text-based PDF rather than an image-only scan.',
+        status: 'pending'
+      };
+    }
+
+    const baseUrl = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:3001' : window.location.origin);
+    const matchResponse = await fetch(`${baseUrl}/api/invoices/match`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        invoiceNumber,
+        vendor,
+        total: Number(total.replace(/[^\d.]/g, '')),
+        quantity,
+        unitPrice,
+        purchaseOrder,
+        goodsReceipt
+      })
+    });
+
+    if (!matchResponse.ok) {
+      throw new Error(`Three-way match failed for ${file.name}`);
+    }
+
+    const matchResult = await matchResponse.json();
+
+    return {
+      id: invoiceNumber,
+      vendor,
+      amount: total,
+      tier: matchResult.tier,
+      score: matchResult.score,
+      reasoning: matchResult.reasoning,
+      status: matchResult.tier === 1 ? 'approved' : 'pending'
+    };
+  };
+
+  const handleBatchUpload = async (event) => {
     const files = Array.from(event.target.files || []);
     event.target.value = '';
 
@@ -51,24 +131,16 @@ export default function AP() {
 
     const pdfFiles = files.filter(file => file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'));
     const rejectedCount = files.length - pdfFiles.length;
-    const uploadedInvoices = pdfFiles.map((file, index) => ({
-      id: `UPLOAD-${Date.now()}-${index + 1}`,
-      vendor: file.name,
-      amount: 'Awaiting extraction',
-      tier: 3,
-      score: 0,
-      reasoning: 'PDF received. This MVP does not extract invoice fields yet; add the structured fields described in the user guide for matching insight.',
-      status: 'pending'
-    }));
+    const uploadedInvoices = await Promise.all(pdfFiles.map(parseInvoicePdf));
 
     if (uploadedInvoices.length > 0) {
       setInvoices(previousInvoices => [...uploadedInvoices, ...previousInvoices]);
     }
 
     if (rejectedCount > 0) {
-      setNotification(`${uploadedInvoices.length} PDF${uploadedInvoices.length === 1 ? '' : 's'} added. ${rejectedCount} non-PDF file${rejectedCount === 1 ? '' : 's'} skipped.`);
+      setNotification(`${uploadedInvoices.length} PDF${uploadedInvoices.length === 1 ? '' : 's'} processed. ${rejectedCount} non-PDF file${rejectedCount === 1 ? '' : 's'} skipped.`);
     } else {
-      setNotification(`${uploadedInvoices.length} PDF${uploadedInvoices.length === 1 ? '' : 's'} added to the queue. Field extraction is not enabled in this MVP.`);
+      setNotification(`${uploadedInvoices.length} PDF${uploadedInvoices.length === 1 ? '' : 's'} processed and added to the queue.`);
     }
     setTimeout(() => setNotification(null), 5000);
   };
@@ -200,7 +272,7 @@ export default function AP() {
                         )}
                         Approve & Post
                       </button>
-                      <button className="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-4 py-2 rounded-xl text-xs font-medium flex items-center justify-center transition-all">
+                      <button onClick={() => handleSeniorReview(inv.id)} disabled={processingId === inv.id} className="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-4 py-2 rounded-xl text-xs font-medium flex items-center justify-center transition-all disabled:opacity-50">
                         <AlertTriangle size={13} className="mr-1.5 text-amber-400" /> Route to Senior Review
                       </button>
                     </>

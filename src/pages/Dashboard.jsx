@@ -1,19 +1,25 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Bot, Clock, TrendingDown, RefreshCw, ArrowRight, ShieldAlert, Sparkles, CheckCircle2, ArrowUpRight } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend, LineChart, Line, CartesianGrid, XAxis, YAxis } from 'recharts';
+import { api } from '../lib/api';
 
 export default function Dashboard() {
+  const [dashboardData, setDashboardData] = useState(null);
   const [kpiData] = useState([
     { title: 'Decision Volume Automated', value: '62%', trend: 'Target: 60%', icon: Bot, color: 'text-cyan-400', bg: 'bg-cyan-500/10 border-cyan-500/20' },
     { title: 'Invoice-to-Pay Cycle', value: '4.5 days', trend: 'Down from 12d', icon: Clock, color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20' },
     { title: 'Maverick Spend Rate', value: '7.8%', trend: 'Down from 18%', icon: TrendingDown, color: 'text-blue-400', bg: 'bg-blue-500/10 border-blue-500/20' },
     { title: 'Reconciliation Close', value: '1.2 days', trend: 'Down from 8d', icon: RefreshCw, color: 'text-purple-400', bg: 'bg-purple-500/10 border-purple-500/20' },
   ]);
+  
+  useEffect(() => {
+    api('/api/dashboard').then(setDashboardData).catch(error => console.error('Failed to fetch dashboard data:', error));
+  }, []);
 
   const TIER_STATS = [
-    { name: 'Tier 1 (Auto-Execute)', value: 35, color: '#38bdf8' },
-    { name: 'Tier 2 (AI-Recommend)', value: 25, color: '#818cf8' },
-    { name: 'Tier 3 (Human-Only)', value: 40, color: '#64748b' },
+    { name: 'Tier 1 (Auto-Execute)', value: dashboardData?.tierCounts?.[0] || 0, color: '#38bdf8' },
+    { name: 'Tier 2 (AI-Recommend)', value: dashboardData?.tierCounts?.[1] || 0, color: '#818cf8' },
+    { name: 'Tier 3 (Human-Only)', value: dashboardData?.tierCounts?.[2] || 0, color: '#64748b' },
   ];
 
   const MONTHLY_TREND = [
@@ -40,7 +46,7 @@ export default function Dashboard() {
               Command Center
             </h2>
             <p className="text-slate-400 text-sm mt-1 max-w-xl">
-              Live enterprise operations monitor. 62% of transactional decisions are executing autonomously under active governance guardrails.
+              Live enterprise operations monitor. {dashboardData ? `${dashboardData.automatedPercent}%` : '...'} of transactional decisions are executing autonomously under active governance guardrails.
             </p>
           </div>
 

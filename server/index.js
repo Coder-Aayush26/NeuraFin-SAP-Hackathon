@@ -44,6 +44,48 @@ app.get('/api/invoices', async (req, res) => {
   }
 });
 
+app.post('/api/invoices/match', async (req, res) => {
+  try {
+    const {
+      invoiceNumber,
+      vendor,
+      total,
+      quantity,
+      unitPrice,
+      purchaseOrder,
+      goodsReceipt
+    } = req.body;
+    const invoiceTotal = Number(total);
+    const invoiceQuantity = Number(quantity);
+    const invoiceUnitPrice = Number(unitPrice);
+
+    if (!invoiceNumber || !vendor || !purchaseOrder || !goodsReceipt || !Number.isFinite(invoiceTotal) || !Number.isFinite(invoiceQuantity) || !Number.isFinite(invoiceUnitPrice)) {
+      return res.status(400).json({ error: 'Invoice number, vendor, total, quantity, unit price, PO, and GRN are required' });
+    }
+
+    const po = await db.get('SELECT * FROM PurchaseOrders WHERE po_number = ?', [purchaseOrder]);
+    const grn = await db.get('SELECT * FROM GoodsReceipts WHERE grn_number = ?', [goodsReceipt]);
+    const vendorMatches = po && po.vendor.toLowerCase() === vendor.toLowerCase();
+    const poQuantityMatches = po && invoiceQuantity === po.ordered_quantity;
+    const receiptMatches = grn && grn.po_number === purchaseOrder && grn.status === 'received' && invoiceQuantity === grn.received_quantity;
+    const priceVariance = po ? Math.abs(invoiceUnitPrice - po.unit_price) / po.unit_price * 100 : 100;
+    const priceMatches = priceVariance <= 1;
+    const exactThreeWayMatch = Boolean(po && grn && vendorMatches && poQuantityMatches && receiptMatches && priceMatches);
+    const assistedMatch = Boolean(po && grn && vendorMatches && poQuantityMatches && receiptMatches && priceVariance <= 5);
+    const tier = exactThreeWayMatch ? 1 : assistedMatch ? 2 : 3;
+    const score = exactThreeWayMatch ? 98 : assistedMatch ? Math.max(70, Math.round(100 - priceVariance * 4)) : 45;
+    const reasoning = exactThreeWayMatch
+      ? `Exact three-way match: invoice quantity ${invoiceQuantity}, PO quantity ${po.ordered_quantity}, and GRN quantity ${grn.received_quantity} agree. Unit price is within tolerance.`
+      : assistedMatch
+        ? `Quantity matches the PO (${po.ordered_quantity}) and GRN (${grn.received_quantity}). Unit price is ${priceVariance.toFixed(1)}% above the PO contract rate — within assisted-review tolerance.`
+        : `Three-way match failed. ${!po ? `PO ${purchaseOrder} was not found. ` : ''}${!grn ? `GRN ${goodsReceipt} was not found. ` : ''}${po && !poQuantityMatches ? 'Invoice quantity does not match the PO. ' : ''}${grn && !receiptMatches ? 'Received quantity or PO linkage does not match. ' : ''}${po && !vendorMatches ? 'Vendor does not match the PO. ' : ''}${po && priceVariance > 5 ? `Unit price variance is ${priceVariance.toFixed(1)}%.` : ''}`.trim();
+
+    res.json({ invoiceNumber, tier, score, reasoning, match: { purchaseOrder: po || null, goodsReceipt: grn || null, priceVariance: Number(priceVariance.toFixed(2)), vendorMatches, poQuantityMatches, receiptMatches } });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.post('/api/invoices/:id/approve', async (req, res) => {
   try {
     const { id } = req.params;
@@ -62,6 +104,45 @@ app.post('/api/invoices/:id/approve', async (req, res) => {
   }
 });
 
+app.post('/api/invoices/:id/review', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const invoice = await db.get('SELECT * FROM Invoices WHERE id = ?', [id]);
+    if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
+    await db.run('UPDATE Invoices SET status = ?, reasoning = ? WHERE id = ?', ['review', 'Routed to Senior Review for human investigation.', id]);
+    await db.run('INSERT INTO AuditLogs (action, time, score, module) VALUES (?, ?, ?, ?)', [`Routed ${id} to Senior Review`, new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), invoice.score, 'AP Automation']);
+    res.json({ ...invoice, status: 'review', reasoning: 'Routed to Senior Review for human investigation.' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/dashboard', async (req, res) => {
+  try {
+    const [invoices, audit, vendors, cash, reconciliations] = await Promise.all([
+      db.all('SELECT tier, status FROM Invoices'),
+      db.all('SELECT * FROM AuditLogs ORDER BY id DESC LIMIT 5'),
+      db.all('SELECT * FROM Vendors'),
+      db.all('SELECT status FROM CashApplications'),
+      db.all('SELECT status FROM Reconciliations')
+    ]);
+    const tierCounts = [1, 2, 3].map(tier => invoices.filter(invoice => invoice.tier === tier).length);
+    const automatedCount = invoices.filter(invoice => invoice.tier === 1 || invoice.tier === 2).length;
+    res.json({
+      invoiceCount: invoices.length,
+      automatedPercent: invoices.length ? Math.round(automatedCount / invoices.length * 100) : 0,
+      tierCounts,
+      pendingInvoices: invoices.filter(invoice => invoice.status === 'pending').length,
+      matchedCash: cash.filter(item => item.status === 'matched').length,
+      openReconciliations: reconciliations.filter(item => item.status !== 'reconciled').length,
+      vendorCount: vendors.length,
+      audit
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/api/audit', async (req, res) => {
   try {
     const logs = await db.all('SELECT * FROM AuditLogs ORDER BY id DESC LIMIT 15');
@@ -75,6 +156,111 @@ app.get('/api/vendors', async (req, res) => {
   try {
     const vendors = await db.all('SELECT * FROM Vendors');
     res.json(vendors);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/cash', async (req, res) => {
+  try {
+    res.json(await db.all('SELECT * FROM CashApplications ORDER BY id'));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/cash/:id/match', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const application = await db.get('SELECT * FROM CashApplications WHERE id = ?', [id]);
+    if (!application) return res.status(404).json({ error: 'Cash application not found' });
+    await db.run('UPDATE CashApplications SET status = ?, confidence = ? WHERE id = ?', ['matched', Math.max(application.confidence, 92), id]);
+    await db.run('INSERT INTO AuditLogs (action, time, score, module) VALUES (?, ?, ?, ?)', [`Matched receipt ${id}: ${application.customer}`, new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 92, 'Cash Application']);
+    res.json({ ...application, status: 'matched', confidence: Math.max(application.confidence, 92) });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/reconciliation', async (req, res) => {
+  try {
+    res.json(await db.all('SELECT * FROM Reconciliations ORDER BY id'));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/reconciliation/:id/reconcile', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const item = await db.get('SELECT * FROM Reconciliations WHERE id = ?', [id]);
+    if (!item) return res.status(404).json({ error: 'Reconciliation item not found' });
+    await db.run('UPDATE Reconciliations SET status = ?, variance = ? WHERE id = ?', ['reconciled', 0, id]);
+    await db.run('INSERT INTO AuditLogs (action, time, score, module) VALUES (?, ?, ?, ?)', [`Reconciled ${id}: ${item.account}`, new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 96, 'Reconciliation']);
+    res.json({ ...item, status: 'reconciled', variance: 0 });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/requisitions', async (req, res) => {
+  try {
+    res.json(await db.all('SELECT * FROM Requisitions ORDER BY id'));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/requisitions', async (req, res) => {
+  try {
+    const { requester, description, category, amount, vendor } = req.body;
+    if (!requester || !description || !category || !Number.isFinite(Number(amount))) {
+      return res.status(400).json({ error: 'Requester, description, category, and amount are required' });
+    }
+    const id = `REQ-${Date.now().toString().slice(-6)}`;
+    const selectedVendor = vendor || (await db.get('SELECT name FROM Vendors WHERE status = ? ORDER BY delivery DESC LIMIT 1', ['Approved']))?.name || 'Pending sourcing';
+    const requisition = { id, requester, description, category, amount: Number(amount), vendor: selectedVendor, status: 'review' };
+    await db.run('INSERT INTO Requisitions (id, requester, description, category, amount, vendor, status) VALUES (?, ?, ?, ?, ?, ?, ?)', [id, requester, description, category, Number(amount), selectedVendor, 'review']);
+    res.status(201).json(requisition);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/requisitions/:id/approve', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const requisition = await db.get('SELECT * FROM Requisitions WHERE id = ?', [id]);
+    if (!requisition) return res.status(404).json({ error: 'Requisition not found' });
+    await db.run('UPDATE Requisitions SET status = ? WHERE id = ?', ['approved', id]);
+    await db.run('INSERT INTO AuditLogs (action, time, score, module) VALUES (?, ?, ?, ?)', [`Approved ${id}: converted to PO`, new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 92, 'Procurement']);
+    res.json({ ...requisition, status: 'approved' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/sourcing', async (req, res) => {
+  try {
+    const requests = await db.all('SELECT * FROM SourcingRequests ORDER BY id');
+    const vendors = await db.all('SELECT *, ROUND((delivery + quality) / 2.0) as score FROM Vendors ORDER BY score DESC');
+    res.json({ requests, vendors });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/sourcing/run', async (req, res) => {
+  try {
+    const { item, category, budget } = req.body;
+    if (!item || !category || !Number.isFinite(Number(budget))) {
+      return res.status(400).json({ error: 'Item, category, and budget are required' });
+    }
+    const vendor = await db.get('SELECT *, ROUND((delivery + quality) / 2.0) as score FROM Vendors ORDER BY CASE WHEN category = ? THEN 0 ELSE 1 END, score DESC LIMIT 1', [category]);
+    const id = `SRC-${Date.now().toString().slice(-6)}`;
+    const request = { id, item, category, budget: Number(budget), recommended_vendor: vendor?.name || 'No eligible vendor', status: vendor ? 'recommended' : 'exception' };
+    await db.run('INSERT INTO SourcingRequests (id, item, category, budget, recommended_vendor, status) VALUES (?, ?, ?, ?, ?, ?)', [id, item, category, Number(budget), request.recommended_vendor, request.status]);
+    res.status(201).json({ request, vendor: vendor || null });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
