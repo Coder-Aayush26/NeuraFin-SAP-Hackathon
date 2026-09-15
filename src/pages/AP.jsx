@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { Upload, Bot, FileText, CheckCircle, AlertTriangle, ArrowRight, ShieldCheck, Loader2, Sparkles } from 'lucide-react';
 
 export default function AP() {
@@ -6,6 +6,7 @@ export default function AP() {
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState(null);
   const [notification, setNotification] = useState(null);
+  const uploadInputRef = useRef(null);
 
   useEffect(() => {
     fetchInvoices();
@@ -42,6 +43,36 @@ export default function AP() {
     }
   };
 
+  const handleBatchUpload = (event) => {
+    const files = Array.from(event.target.files || []);
+    event.target.value = '';
+
+    if (files.length === 0) return;
+
+    const pdfFiles = files.filter(file => file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'));
+    const rejectedCount = files.length - pdfFiles.length;
+    const uploadedInvoices = pdfFiles.map((file, index) => ({
+      id: `UPLOAD-${Date.now()}-${index + 1}`,
+      vendor: file.name,
+      amount: 'Awaiting extraction',
+      tier: 3,
+      score: 0,
+      reasoning: 'PDF received. This MVP does not extract invoice fields yet; add the structured fields described in the user guide for matching insight.',
+      status: 'pending'
+    }));
+
+    if (uploadedInvoices.length > 0) {
+      setInvoices(previousInvoices => [...uploadedInvoices, ...previousInvoices]);
+    }
+
+    if (rejectedCount > 0) {
+      setNotification(`${uploadedInvoices.length} PDF${uploadedInvoices.length === 1 ? '' : 's'} added. ${rejectedCount} non-PDF file${rejectedCount === 1 ? '' : 's'} skipped.`);
+    } else {
+      setNotification(`${uploadedInvoices.length} PDF${uploadedInvoices.length === 1 ? '' : 's'} added to the queue. Field extraction is not enabled in this MVP.`);
+    }
+    setTimeout(() => setNotification(null), 5000);
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       
@@ -51,7 +82,20 @@ export default function AP() {
           <h2 className="text-2xl font-bold text-white tracking-tight">Intelligent AP & Invoicing</h2>
           <p className="text-slate-400 text-xs mt-0.5">Autonomous 3-way matching engine powered by Tiered AI Routing</p>
         </div>
-        <button className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-lg shadow-blue-500/25 flex items-center transition-all">
+        <input
+          ref={uploadInputRef}
+          type="file"
+          accept="application/pdf,.pdf"
+          multiple
+          onChange={handleBatchUpload}
+          className="hidden"
+          aria-label="Select invoice PDF files"
+        />
+        <button
+          type="button"
+          onClick={() => uploadInputRef.current?.click()}
+          className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-lg shadow-blue-500/25 flex items-center transition-all"
+        >
           <Upload size={15} className="mr-2" /> Upload Batch PDF
         </button>
       </div>
