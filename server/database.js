@@ -108,6 +108,17 @@ export async function initDb() {
     }
   }
 
+  const additionalInvoices = [
+    ['INV-2205', 'Northstar Components', 'INR 3,45,000', 1, 96, 'Exact three-way match confirmed. Quantity, receipt, and contract price agree.', 'approved'],
+    ['INV-2206', 'Acme Steel Co.', 'INR 2,18,000', 2, 78, 'Quantity matches PO and GRN. Unit price variance is 2.5% and requires approval.', 'pending'],
+    ['INV-2207', 'Global Tech Supplies', 'INR 86,400', 1, 94, 'Exact three-way match confirmed. Auto-posting approved.', 'approved'],
+    ['INV-2208', 'Rapid Logistics', 'INR 1,12,500', 3, 51, 'Goods receipt is missing and invoice value exceeds the approved PO.', 'pending'],
+    ['INV-2209', 'Vertex Facilities', 'INR 64,800', 2, 82, 'Service quantity matches the receipt. Rate variance is within assisted-review tolerance.', 'pending']
+  ];
+  for (const invoice of additionalInvoices) {
+    await db.run('INSERT OR IGNORE INTO Invoices (id, vendor, amount, tier, score, reasoning, status) VALUES (?, ?, ?, ?, ?, ?, ?)', invoice);
+  }
+
   const auditCount = await db.get('SELECT COUNT(*) as count FROM AuditLogs');
   if (auditCount.count === 0) {
     const logs = [
@@ -136,6 +147,15 @@ export async function initDb() {
     }
   }
 
+  const additionalVendors = [
+    ['Northstar Components', 'Electronics', 93, 95, 'Low', 'Approved'],
+    ['Vertex Facilities', 'Services', 78, 88, 'Medium', 'Monitor'],
+    ['Orion Office Systems', 'Office Supplies', 91, 86, 'Low', 'Approved']
+  ];
+  for (const vendor of additionalVendors) {
+    await db.run('INSERT OR IGNORE INTO Vendors (name, category, delivery, quality, risk, status) VALUES (?, ?, ?, ?, ?, ?)', vendor);
+  }
+
   const purchaseOrderCount = await db.get('SELECT COUNT(*) as count FROM PurchaseOrders');
   if (purchaseOrderCount.count === 0) {
     await db.run(
@@ -144,12 +164,32 @@ export async function initDb() {
     );
   }
 
+  const additionalPurchaseOrders = [
+    ['PO-8822', 'Northstar Components', 'Industrial control module', 50, 6900, 'INR'],
+    ['PO-8823', 'Global Tech Supplies', 'Laptop docking station', 24, 3600, 'INR'],
+    ['PO-8824', 'Vertex Facilities', 'Preventive maintenance service', 12, 5200, 'INR'],
+    ['PO-8825', 'Orion Office Systems', 'Ergonomic office chair', 30, 11800, 'INR']
+  ];
+  for (const purchaseOrder of additionalPurchaseOrders) {
+    await db.run('INSERT OR IGNORE INTO PurchaseOrders (po_number, vendor, item_description, ordered_quantity, unit_price, currency) VALUES (?, ?, ?, ?, ?, ?)', purchaseOrder);
+  }
+
   const goodsReceiptCount = await db.get('SELECT COUNT(*) as count FROM GoodsReceipts');
   if (goodsReceiptCount.count === 0) {
     await db.run(
       'INSERT INTO GoodsReceipts (grn_number, po_number, received_quantity, status) VALUES (?, ?, ?, ?)',
       ['GRN-8821', 'PO-8821', 100, 'received']
     );
+  }
+
+  const additionalGoodsReceipts = [
+    ['GRN-8822', 'PO-8822', 50, 'received'],
+    ['GRN-8823', 'PO-8823', 24, 'received'],
+    ['GRN-8824', 'PO-8824', 10, 'partial'],
+    ['GRN-8825', 'PO-8825', 30, 'received']
+  ];
+  for (const receipt of additionalGoodsReceipts) {
+    await db.run('INSERT OR IGNORE INTO GoodsReceipts (grn_number, po_number, received_quantity, status) VALUES (?, ?, ?, ?)', receipt);
   }
 
   const cashApplicationCount = await db.get('SELECT COUNT(*) as count FROM CashApplications');
@@ -164,6 +204,15 @@ export async function initDb() {
     }
   }
 
+  const additionalCashApplications = [
+    ['CA-1004', 'Northstar Components', 'INR 3,45,000', 'REM-7760', 95, 'matched'],
+    ['CA-1005', 'Vertex Facilities', 'INR 64,800', 'REM-7764', 68, 'pending'],
+    ['CA-1006', 'Orion Office Systems', 'INR 2,10,000', 'REM-7769', 89, 'pending']
+  ];
+  for (const application of additionalCashApplications) {
+    await db.run('INSERT OR IGNORE INTO CashApplications (id, customer, amount, reference, confidence, status) VALUES (?, ?, ?, ?, ?, ?)', application);
+  }
+
   const reconciliationCount = await db.get('SELECT COUNT(*) as count FROM Reconciliations');
   if (reconciliationCount.count === 0) {
     const reconciliations = [
@@ -174,6 +223,15 @@ export async function initDb() {
     for (const reconciliation of reconciliations) {
       await db.run('INSERT INTO Reconciliations (id, account, subledger_amount, gl_amount, variance, status) VALUES (?, ?, ?, ?, ?, ?)', reconciliation);
     }
+  }
+
+  const additionalReconciliations = [
+    ['REC-1004', 'Operating Expenses', 284500, 284500, 0, 'reconciled'],
+    ['REC-1005', 'Accrued Services', 198000, 201250, 3250, 'pending'],
+    ['REC-1006', 'Vendor Advances', 75000, 72000, -3000, 'pending']
+  ];
+  for (const reconciliation of additionalReconciliations) {
+    await db.run('INSERT OR IGNORE INTO Reconciliations (id, account, subledger_amount, gl_amount, variance, status) VALUES (?, ?, ?, ?, ?, ?)', reconciliation);
   }
 
   const requisitionCount = await db.get('SELECT COUNT(*) as count FROM Requisitions');
@@ -188,12 +246,30 @@ export async function initDb() {
     }
   }
 
+  const additionalRequisitions = [
+    ['REQ-994', 'Engineering Team', 'Industrial control modules', 'Electronics', 345000, 'Northstar Components', 'approved'],
+    ['REQ-995', 'Facilities Team', 'Preventive maintenance service', 'Services', 62400, 'Vertex Facilities', 'review'],
+    ['REQ-996', 'People Operations', 'Ergonomic office chairs', 'Office Supplies', 354000, 'Orion Office Systems', 'draft']
+  ];
+  for (const requisition of additionalRequisitions) {
+    await db.run('INSERT OR IGNORE INTO Requisitions (id, requester, description, category, amount, vendor, status) VALUES (?, ?, ?, ?, ?, ?, ?)', requisition);
+  }
+
   const sourcingRequestCount = await db.get('SELECT COUNT(*) as count FROM SourcingRequests');
   if (sourcingRequestCount.count === 0) {
     await db.run(
       'INSERT INTO SourcingRequests (id, item, category, budget, recommended_vendor, status) VALUES (?, ?, ?, ?, ?, ?)',
       ['SRC-1001', 'Cold Rolled Steel Sheet', 'Raw Materials', 500000, 'Acme Steel Co.', 'recommended']
     );
+  }
+
+  const additionalSourcingRequests = [
+    ['SRC-1002', 'Industrial control modules', 'Electronics', 360000, 'Northstar Components', 'recommended'],
+    ['SRC-1003', 'Preventive maintenance service', 'Services', 70000, 'Vertex Facilities', 'recommended'],
+    ['SRC-1004', 'Ergonomic office chairs', 'Office Supplies', 400000, 'Orion Office Systems', 'recommended']
+  ];
+  for (const sourcingRequest of additionalSourcingRequests) {
+    await db.run('INSERT OR IGNORE INTO SourcingRequests (id, item, category, budget, recommended_vendor, status) VALUES (?, ?, ?, ?, ?, ?)', sourcingRequest);
   }
 
   return db;
