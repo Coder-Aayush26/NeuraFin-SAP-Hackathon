@@ -30,10 +30,9 @@ export default function AP() {
     try {
       const baseUrl = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:3001' : window.location.origin);
       const res = await fetch(`${baseUrl}/api/invoices/${id}/approve`, { method: 'POST' });
-      const result = await res.json();
-      
-      // Optimistic update
-      setInvoices(prev => prev.map(inv => inv.id === id ? { ...inv, status: 'approved' } : inv));
+      if (!res.ok) throw new Error('Failed to approve invoice');
+      const updated = await res.json();
+      setInvoices(prev => prev.map(inv => inv.id === id ? updated : inv));
       setNotification(`Invoice ${id} approved & posted! Audit log generated.`);
       setTimeout(() => setNotification(null), 4000);
     } catch (error) {
@@ -85,6 +84,7 @@ export default function AP() {
   const parseInvoicePdf = async (file, index) => {
     const pdfBytes = await file.arrayBuffer();
     const pdfText = new TextDecoder('latin1').decode(pdfBytes);
+    const baseUrl = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:3001' : window.location.origin);
     const pdfLines = [...pdfText.matchAll(/\(([^)]*)\)\s*Tj/g)].map(match => match[1]);
     const invoiceNumber = extractPdfValue(pdfText, 'Invoice Number');
     const vendor = extractPdfValue(pdfText, 'Supplier');
@@ -97,7 +97,7 @@ export default function AP() {
     const unitPrice = lineItemValues ? Number(lineItemValues[2].replaceAll(',', '')) : NaN;
 
     if (!invoiceNumber || !vendor || !total || !Number.isFinite(quantity) || !Number.isFinite(unitPrice)) {
-      return {
+      const exceptionInvoice = {
         id: `UPLOAD-${Date.now()}-${index + 1}`,
         vendor: file.name,
         amount: 'Awaiting extraction',
@@ -106,9 +106,15 @@ export default function AP() {
         reasoning: 'PDF received, but readable invoice fields or line-item pricing were not found. Use a text-based PDF rather than an image-only scan.',
         status: 'pending'
       };
+      const saveResponse = await fetch(`${baseUrl}/api/invoices`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(exceptionInvoice)
+      });
+      if (!saveResponse.ok) throw new Error(`Could not save ${file.name} to the invoice queue`);
+      return await saveResponse.json();
     }
 
-    const baseUrl = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:3001' : window.location.origin);
     const matchResponse = await fetch(`${baseUrl}/api/invoices/match`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -129,7 +135,7 @@ export default function AP() {
 
     const matchResult = await matchResponse.json();
 
-    return {
+    const invoice = {
       id: invoiceNumber,
       vendor,
       amount: total,
@@ -138,6 +144,14 @@ export default function AP() {
       reasoning: matchResult.reasoning,
       status: matchResult.tier === 1 ? 'approved' : 'pending'
     };
+
+    const saveResponse = await fetch(`${baseUrl}/api/invoices`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(invoice)
+    });
+    if (!saveResponse.ok) throw new Error(`Could not save ${file.name} to the invoice queue`);
+    return await saveResponse.json();
   };
 
   const handleBatchUpload = async (event) => {
@@ -148,7 +162,15 @@ export default function AP() {
 
     const pdfFiles = files.filter(file => file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'));
     const rejectedCount = files.length - pdfFiles.length;
-    const uploadedInvoices = await Promise.all(pdfFiles.map(parseInvoicePdf));
+    let uploadedInvoices;
+    try {
+      uploadedInvoices = await Promise.all(pdfFiles.map(parseInvoicePdf));
+    } catch (error) {
+      console.error('Failed to process invoice batch:', error);
+      setNotification(error.message);
+      setTimeout(() => setNotification(null), 5000);
+      return;
+    }
 
     if (uploadedInvoices.length > 0) {
       setInvoices(previousInvoices => [...uploadedInvoices, ...previousInvoices]);

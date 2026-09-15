@@ -44,6 +44,27 @@ app.get('/api/invoices', async (req, res) => {
   }
 });
 
+app.post('/api/invoices', async (req, res) => {
+  try {
+    const { id, vendor, amount, tier, score, reasoning, status = 'pending' } = req.body;
+    if (!id || !vendor || !amount || !Number.isInteger(Number(tier)) || !Number.isFinite(Number(score)) || !reasoning) {
+      return res.status(400).json({ error: 'Invoice id, vendor, amount, tier, score, and reasoning are required' });
+    }
+
+    await db.run(
+      `INSERT INTO Invoices (id, vendor, amount, tier, score, reasoning, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET vendor = excluded.vendor, amount = excluded.amount,
+       tier = excluded.tier, score = excluded.score, reasoning = excluded.reasoning,
+       status = excluded.status`,
+      [id, vendor, amount, Number(tier), Number(score), reasoning, status]
+    );
+    res.status(201).json(await db.get('SELECT * FROM Invoices WHERE id = ?', [id]));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.post('/api/invoices/match', async (req, res) => {
   try {
     const {
@@ -89,6 +110,8 @@ app.post('/api/invoices/match', async (req, res) => {
 app.post('/api/invoices/:id/approve', async (req, res) => {
   try {
     const { id } = req.params;
+    const invoice = await db.get('SELECT * FROM Invoices WHERE id = ?', [id]);
+    if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
     await db.run('UPDATE Invoices SET status = ? WHERE id = ?', ['approved', id]);
 
     // Record immutable audit entry
@@ -98,7 +121,7 @@ app.post('/api/invoices/:id/approve', async (req, res) => {
       [`Manual Approval & Auto-Post: ${id}`, time, 94, 'AP Automation']
     );
 
-    res.json({ success: true, message: `Invoice ${id} approved and posted successfully.` });
+    res.json({ ...invoice, status: 'approved', success: true, message: `Invoice ${id} approved and posted successfully.` });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
